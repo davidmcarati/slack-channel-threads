@@ -1,0 +1,136 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mock Slack sidebar</title>
+<style>
+  body { margin: 0; font: 15px/1.4 system-ui, sans-serif; background: #1a1d21; color: #d1d2d3; display: flex; height: 100vh; }
+  .p-channel_sidebar { width: 260px; background: #19171d; color: #c9c5cc; display: flex; flex-direction: column; }
+  .head { padding: 12px 16px; font-weight: 700; border-bottom: 1px solid #333; }
+  .scroller { flex: 1; overflow-y: auto; }
+  .vlist { position: relative; }
+  .p-channel_sidebar__static_list__item { position: absolute; left: 0; right: 0; height: 28px; }
+  .flow .p-channel_sidebar__static_list__item { position: static; }
+  .p-channel_sidebar__channel { display: flex; align-items: center; height: 28px; padding: 0 16px; gap: 8px; color: inherit; text-decoration: none; }
+  .p-channel_sidebar__channel:hover { background: #ffffff14; }
+  .hash { width: 16px; opacity: .6; text-align: center; }
+  .p-channel_sidebar__name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  main { flex: 1; padding: 20px; }
+  /* ?shot: sidebar only, for the README screenshot */
+  .shot .p-channel_sidebar { flex: none; width: 320px; }
+  .shot main { display: none; }
+  pre { font-size: 12px; color: #9a9; }
+</style>
+</head>
+<body>
+<div class="p-channel_sidebar">
+  <div class="head">Mock workspace</div>
+  <div class="scroller" id="scroller"><div class="vlist" id="vlist"></div></div>
+</div>
+<main>
+  <h3 id="where">Channel: —</h3>
+  <pre id="log"></pre>
+</main>
+<script>
+  const FLOW = location.search.includes("flow");
+  if (FLOW) document.body.classList.add("flow");
+  if (location.search.includes("shot")) document.body.classList.add("shot");
+  const log = (...a) => { document.getElementById("log").textContent += a.join(" ") + "\n"; };
+
+  const teamId = "T0MOCK";
+  localStorage.setItem("localConfig_v2", JSON.stringify({
+    lastActiveTeamId: teamId,
+    teams: { [teamId]: { id: teamId, token: "xoxc-mock", user_id: "U0ME", url: location.origin + "/mock/" } },
+  }));
+
+  const names = ["general", "random", "design", "dev", "release", "support", "marketing"];
+  const channels = Array.from({ length: 40 }, (_, i) => ({ id: "C" + String(i).padStart(4, "0"), name: names[i] || "channel-" + i }));
+
+  const now = Date.now() / 1000;
+  const threads = [];
+  function mk(ch, text, ageHours, unread, mention) {
+    const latest = now - ageHours * 3600;
+    const ts = (latest - 600 - threads.length).toFixed(6);
+    threads.push({
+      root_msg: { channel: ch, ts, thread_ts: ts, text, latest_reply: latest.toFixed(6), last_read: unread ? (latest - 60).toFixed(6) : latest.toFixed(6) },
+      unread_replies: Array.from({ length: unread }, () => ({ text: mention ? "hey <@U0ME> look" : "ok" })),
+      latest_replies: [],
+    });
+  }
+  mk("C0000", "Release checklist for *v2.4* — who owns QA?", 1, 3, true);
+  mk("C0000", "Lunch on Friday?", 5, 0, false);
+  mk("C0000", "<@U0BOB> can you review the <https://example.com/pr/12|PR #12>", 8, 2, false);
+  mk("C0000", "Office wifi is down again", 20, 0, false);
+  mk("C0000", "Новый онбординг для дизайнеров", 30, 1, false);
+  mk("C0000", "Sixth thread to trigger show-more", 40, 0, false);
+  mk("C0000", "Seventh thread", 50, 0, false);
+  mk("C0002", "Sidebar redesign: threads under channels", 2, 5, false);
+  mk("C0002", "", 3, 0, false);
+  threads[threads.length - 1].root_msg.files = [{ title: "mockup-v3.fig" }];
+  mk("C0003", "Old thread, should be hidden (5 days)", 120, 0, false);
+  mk("C0025", "Thread deep in the list", 4, 1, true);
+
+  const realFetch = window.fetch.bind(window);
+  window.fetch = async (url, opts) => {
+    const m = String(url).match(/\/api\/([\w.]+)$/);
+    // Every API base the script may try (team URL, then this origin) is answered by the mock.
+    if (!m) return realFetch(url, opts);
+    const method = m[1];
+    const body = opts && opts.body;
+    const get = (k) => (body && body.get ? body.get(k) : null);
+    log("API", method, get("token") === "xoxc-mock" ? "(token ok)" : "(BAD TOKEN)");
+    let json = { ok: false, error: "unknown_method" };
+    if (method === "subscriptions.thread.getView") json = { ok: true, threads, has_more: false };
+    if (method === "users.info") json = { ok: true, user: { name: "bob", profile: { display_name: "Bob" } } };
+    if (method === "subscriptions.thread.mark") {
+      const t = threads.find((x) => x.root_msg.channel === get("channel") && x.root_msg.thread_ts === get("thread_ts"));
+      if (t) { t.unread_replies = []; t.root_msg.last_read = t.root_msg.latest_reply; }
+      json = { ok: true };
+    }
+    return new Response(JSON.stringify(json), { headers: { "content-type": "application/json" } });
+  };
+
+  // A small virtualized list that re-creates rows on scroll, like a React virtual list would.
+  const ROW = 28;
+  const vlist = document.getElementById("vlist");
+  const scroller = document.getElementById("scroller");
+  function renderRows() {
+    let from = 0, to = channels.length;
+    if (!FLOW) {
+      vlist.style.height = channels.length * ROW + "px";
+      from = Math.max(0, Math.floor(scroller.scrollTop / ROW) - 3);
+      to = Math.min(channels.length, Math.ceil((scroller.scrollTop + scroller.clientHeight) / ROW) + 3);
+    }
+    const ours = [...vlist.children].filter((el) => el.classList.contains("sct-block"));
+    vlist.replaceChildren(...ours);
+    for (let i = from; i < to; i++) {
+      const c = channels[i];
+      const item = document.createElement("div");
+      item.className = "p-channel_sidebar__static_list__item";
+      if (!FLOW) item.style.top = i * ROW + "px";
+      item.innerHTML = `<a class="p-channel_sidebar__channel" href="#" data-qa-channel-sidebar-channel-id="${c.id}"><span class="hash">#</span><span class="p-channel_sidebar__name">${c.name}</span></a>`;
+      item.firstChild.addEventListener("click", (e) => { e.preventDefault(); show(c.id, null); });
+      vlist.insertBefore(item, ours[0] || null);
+    }
+  }
+  scroller.addEventListener("scroll", renderRows);
+  renderRows();
+
+  function show(ch, thread) {
+    const c = channels.find((x) => x.id === ch);
+    document.getElementById("where").textContent = "Channel: #" + (c ? c.name : ch) + (thread ? "  →  thread " + thread : "");
+  }
+  // The desktop app's bridge that the script uses to open a thread in the side panel.
+  window.desktopDelegates = {
+    [teamId]: {
+      notificationActivationHandler({ channelId, threadTs }) {
+        log("open thread", channelId, threadTs);
+        show(channelId, threadTs);
+      },
+    },
+  };
+</script>
+<script src="../slack-channel-threads.js"></script>
+</body>
+</html>
