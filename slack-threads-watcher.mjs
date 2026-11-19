@@ -106,7 +106,7 @@ function takeLock() {
 async function main() {
   await mkdir(DATA, { recursive: true });
   if (!once && !(await takeLock())) {
-    console.log("Another watcher is already running.");
+    await log(`another watcher already holds 127.0.0.1:${LOCK_PORT}, exiting`);
     return;
   }
   if (!once) await log("watching for Slack's main-process inspector on port", PORT);

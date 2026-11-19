@@ -42,9 +42,27 @@ Copy-Item (Join-Path $PSScriptRoot "slack-threads-watcher.mjs") $app -Force
 
 $watcher = Join-Path $app "slack-threads-watcher.mjs"
 $vbs = Join-Path $app "start-hidden.vbs"
+$startupLog = Join-Path $data "startup.log"
+# Hidden starter. At sign-in, drives and folders can show up late, so wait for node and the
+# watcher (up to a minute), and write problems to startup.log instead of popping a dialog.
 @"
+On Error Resume Next
+Set fso = CreateObject("Scripting.FileSystemObject")
 Set sh = CreateObject("WScript.Shell")
-sh.Run """$node"" ""$watcher""", 0, False
+node = "$node"
+watcher = "$watcher"
+logPath = "$startupLog"
+For i = 1 To 30
+  If fso.FileExists(node) And fso.FileExists(watcher) Then Exit For
+  WScript.Sleep 2000
+Next
+Err.Clear
+sh.Run Chr(34) & node & Chr(34) & " " & Chr(34) & watcher & Chr(34), 0, False
+msg = Now & " start: node=" & fso.FileExists(node) & " watcher=" & fso.FileExists(watcher)
+If Err.Number <> 0 Then msg = msg & " FAILED " & Err.Number & " " & Err.Description Else msg = msg & " ok"
+Set f = fso.OpenTextFile(logPath, 8, True)
+f.WriteLine msg
+f.Close
 "@ | Set-Content -Encoding ASCII $vbs
 
 [Environment]::SetEnvironmentVariable("SLACK_DEVELOPER_MENU", "true", "User")
