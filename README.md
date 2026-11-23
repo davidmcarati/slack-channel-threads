@@ -45,7 +45,7 @@ The installer:
    `%LOCALAPPDATA%\SlackThreads\app`
 2. sets the user environment variable `SLACK_DEVELOPER_MENU=true`, which makes Slack show its
    **View → Developer** menu
-3. registers the watcher in `HKCU...CurrentVersionRun` (shown as *SlackThreads* in Task
+3. registers the watcher in `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (shown as *SlackThreads* in Task
    Manager → Startup apps), so it starts hidden at Windows sign-in, and starts it now
 
 Then quit Slack completely (`Ctrl+Q`) and start it again so it picks up the variable.
@@ -109,7 +109,7 @@ node tools/inject.mjs eval "SCT.setMaxVisible(8)"   # threads before "Show N mor
   page), `eval "<js>"`.
 - In the page: `SCT.diag()` reports what the script found, `SCT.refresh()`, `SCT.stop()`.
 
-Logs: `%LOCALAPPDATA%\SlackThreads\watcher.log`.
+Logs: `%LOCALAPPDATA%\SlackThreads\startup.log` (each start at sign-in) and `watcher.log`.
 
 ## License
 
