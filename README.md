@@ -45,7 +45,8 @@ The installer:
    `%LOCALAPPDATA%\SlackThreads\app`
 2. sets the user environment variable `SLACK_DEVELOPER_MENU=true`, which makes Slack show its
    **View → Developer** menu
-3. adds a Startup shortcut that runs the watcher hidden at Windows sign-in, and starts it now
+3. registers the watcher in `HKCU...CurrentVersionRun` (shown as *SlackThreads* in Task
+   Manager → Startup apps), so it starts hidden at Windows sign-in, and starts it now
 
 Then quit Slack completely (`Ctrl+Q`) and start it again so it picks up the variable.
 
@@ -61,7 +62,7 @@ page reloads and workspace switches — until Slack quits.
 powershell -ExecutionPolicy Bypass -File install.ps1 -Uninstall
 ```
 
-Removes the shortcut, stops the watcher and removes `SLACK_DEVELOPER_MENU`. Delete
+Removes the autostart entry, stops the watcher and removes `SLACK_DEVELOPER_MENU`. Delete
 `%LOCALAPPDATA%\SlackThreads` to remove the files and logs.
 
 ## How it works

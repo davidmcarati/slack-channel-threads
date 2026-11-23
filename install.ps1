@@ -2,7 +2,8 @@
 #   - copies the watcher and the threads script to %LOCALAPPDATA%\SlackThreads\app
 #   - sets the user environment variable SLACK_DEVELOPER_MENU=true so Slack always shows
 #     menu > View > Developer (needed for "Enable Main Process Inspector")
-#   - adds a Startup shortcut that runs the watcher hidden at Windows sign-in
+#   - adds a "SlackThreads" entry under HKCU\...\CurrentVersion\Run that starts the watcher
+#     hidden at Windows sign-in (the same place most apps register their autostart)
 # After each Slack start: menu > View > Developer > Enable Main Process Inspector. That's it.
 #
 # Uninstall: powershell -ExecutionPolicy Bypass -File install.ps1 -Uninstall
@@ -11,10 +12,12 @@ $ErrorActionPreference = "Stop"
 
 $data    = Join-Path $env:LOCALAPPDATA "SlackThreads"
 $app     = Join-Path $data "app"
-$startup = Join-Path ([Environment]::GetFolderPath("Startup")) "Slack Threads.lnk"
+$runKey  = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
+$runName = "SlackThreads"
 $programs = [Environment]::GetFolderPath("Programs")
-# Shortcuts from the earlier separate-profile version.
-$legacy  = @((Join-Path $programs "Slack Threads.lnk"), (Join-Path $programs "Slack Threads - sign in from copied link.lnk"))
+# Shortcuts from earlier versions: the Startup-folder one was not run reliably at sign-in.
+$legacy  = @((Join-Path ([Environment]::GetFolderPath("Startup")) "Slack Threads.lnk"),
+             (Join-Path $programs "Slack Threads.lnk"), (Join-Path $programs "Slack Threads - sign in from copied link.lnk"))
 
 function Stop-Watcher {
   Get-CimInstance Win32_Process -Filter "Name='node.exe'" |
@@ -24,7 +27,10 @@ function Stop-Watcher {
 
 if ($Uninstall) {
   Stop-Watcher
-  foreach ($p in @($startup) + $legacy) { if (Test-Path $p) { Remove-Item $p; "removed $p" } }
+  foreach ($p in $legacy) { if (Test-Path $p) { Remove-Item $p; "removed $p" } }
+  if (Get-ItemProperty $runKey -Name $runName -ErrorAction SilentlyContinue) {
+    Remove-ItemProperty $runKey -Name $runName; "removed autostart entry $runName"
+  }
   [Environment]::SetEnvironmentVariable("SLACK_DEVELOPER_MENU", $null, "User")
   "removed SLACK_DEVELOPER_MENU (Slack drops the Developer menu after its next restart)"
   "Files stay in $data; delete the folder if you want them gone."
@@ -68,27 +74,12 @@ f.Close
 [Environment]::SetEnvironmentVariable("SLACK_DEVELOPER_MENU", "true", "User")
 "set SLACK_DEVELOPER_MENU=true for your user"
 
-$ico = Join-Path $app "slack.ico"
-if (-not (Test-Path $ico)) {
-  try {
-    Add-Type -AssemblyName System.Drawing
-    $pkg = (Get-AppxPackage com.tinyspeck.slackdesktop).InstallLocation
-    $icon = [System.Drawing.Icon]::ExtractAssociatedIcon((Join-Path $pkg "app\Slack.exe"))
-    $fs = [System.IO.File]::Create($ico); $icon.Save($fs); $fs.Close()
-  } catch { $ico = $null }
-}
-
-$shell = New-Object -ComObject WScript.Shell
-$lnk = $shell.CreateShortcut($startup)
-$lnk.TargetPath = Join-Path $env:WINDIR "System32\wscript.exe"
-$lnk.Arguments = "`"$vbs`""
-$lnk.WorkingDirectory = $app
-$lnk.Description = "Adds active threads under channels to Slack"
-if ($ico) { $lnk.IconLocation = "$ico,0" }
-$lnk.Save()
-"created $startup"
+$wscript = Join-Path $env:WINDIR "System32\wscript.exe"
+Set-ItemProperty $runKey -Name $runName -Value "`"$wscript`" `"$vbs`""
+"autostart entry: $runKey\$runName"
+Remove-Item -Force (Join-Path $app "slack.ico") -ErrorAction SilentlyContinue
 
 # Start it now too, so there's no need to sign out and back in.
-Start-Process -FilePath (Join-Path $env:WINDIR "System32\wscript.exe") -ArgumentList "`"$vbs`""
+Start-Process -FilePath $wscript -ArgumentList "`"$vbs`""
 "watcher started"
 "Installed to $app"
