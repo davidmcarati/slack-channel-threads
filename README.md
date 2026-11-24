@@ -42,11 +42,15 @@ powershell -ExecutionPolicy Bypass -File install.ps1
 The installer:
 
 1. copies `slack-threads-watcher.mjs` and `slack-channel-threads.js` to
-   `%LOCALAPPDATA%\SlackThreads\app`
+   `%USERPROFILE%\.slack-channel-threads\app`
 2. sets the user environment variable `SLACK_DEVELOPER_MENU=true`, which makes Slack show its
    **View → Developer** menu
-3. registers the watcher in `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (shown as *SlackThreads* in Task
-   Manager → Startup apps), so it starts hidden at Windows sign-in, and starts it now
+3. registers a Task Scheduler task **SlackThreads** that starts the watcher without a window when
+   you sign in to Windows, and starts it now
+
+Not in AppData on purpose: a shell running inside a packaged (MSIX) app — Claude desktop, for
+example — has its AppData writes redirected to a private folder that Windows' own autostart
+never sees.
 
 Then quit Slack completely (`Ctrl+Q`) and start it again so it picks up the variable.
 
@@ -62,8 +66,8 @@ page reloads and workspace switches — until Slack quits.
 powershell -ExecutionPolicy Bypass -File install.ps1 -Uninstall
 ```
 
-Removes the autostart entry, stops the watcher and removes `SLACK_DEVELOPER_MENU`. Delete
-`%LOCALAPPDATA%\SlackThreads` to remove the files and logs.
+Removes the scheduled task, stops the watcher and removes `SLACK_DEVELOPER_MENU`. Delete
+`%USERPROFILE%\.slack-channel-threads` to remove the files and logs.
 
 ## How it works
 
@@ -109,7 +113,8 @@ node tools/inject.mjs eval "SCT.setMaxVisible(8)"   # threads before "Show N mor
   page), `eval "<js>"`.
 - In the page: `SCT.diag()` reports what the script found, `SCT.refresh()`, `SCT.stop()`.
 
-Logs: `%LOCALAPPDATA%\SlackThreads\startup.log` (each start at sign-in) and `watcher.log`.
+Logs: `%USERPROFILE%\.slack-channel-threads\startup.log` (each start at sign-in) and
+`watcher.log`. Task Scheduler → *SlackThreads* shows the last run and its result.
 
 ## License
 

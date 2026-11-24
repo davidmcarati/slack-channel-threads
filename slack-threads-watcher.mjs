@@ -8,13 +8,15 @@
 //   node slack-threads-watcher.mjs --once   inject once if the inspector is open, then exit
 import { readFile, appendFile, mkdir } from "node:fs/promises";
 import { createServer } from "node:net";
-import { join, dirname } from "node:path";
+import { join, dirname, basename } from "node:path";
+import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.SLACK_INSPECTOR_PORT || 9229);
 const LOCK_PORT = 9239; // single-instance lock
-const DATA = join(process.env.LOCALAPPDATA || HERE, "SlackThreads");
+// Installed copies live in <install>\app and log to <install>; a dev run logs to the default one.
+const DATA = basename(HERE) === "app" ? dirname(HERE) : join(homedir(), ".slack-channel-threads");
 const LOG = join(DATA, "watcher.log");
 const SCRIPT = join(HERE, "slack-channel-threads.js");
 const POLL_MS = 2000;
